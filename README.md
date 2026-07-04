@@ -154,3 +154,45 @@ ST7305 每字节对应一个 2×2 像素块的非常规排布，通过预计算 
 - **动画 / 游戏**：全屏刷新每帧推 15KB SPI@10MHz，帧率有限；高帧率需局部刷新或提高 SPI 时钟。
 
 参考代码：Waveshare 官方仓库 `ESP32-S3-RLCD-4.2` 的 `02_Example/ESP-IDF/` 下有 WiFi / I2C / SD / Audio / RTC 等 11 个示例，开发新功能时可优先参考。
+
+## 示例应用：股票实时行情（stock_app）
+
+当前 `main/main.c` 运行一个单股行情查看器，展示"联网 → 取数 → 单色屏渲染"的完整链路。
+
+- **股票**：002859 洁美科技（写死，中文名为 UTF-8 常量）
+- **数据源**：腾讯 `http://qt.gtimg.cn/q=sz002859`，纯 HTTP，返回 `~` 分隔文本，无需 TLS / key / JSON 库
+- **刷新**：后台 task 每 5 秒取一次；UI 每秒重绘
+- **Wi-Fi**：STA 写死 `solaso_5G`（凭据在 `components/stock_app/include/stock_config.h`），断线自动重连
+- **字库**：`font_stock_16`（16px 1-bpp 子集，仅嵌入 UI 用到的固定字形），由 `lv_font_conv` 生成
+- **容错**：取数 / 解析失败保留上次数值、不崩溃；首次连网前显示"连接中"、无数据显示 `--`
+- **涨跌**：单色屏无红绿，用 ↑ / ↓ 表示
+
+组件结构（`components/stock_app/`）：
+
+```
+include/
+  stock_config.h    写死项单一真相源（SSID/密码/股票代码/URL/刷新周期）
+  wifi_sta.h        Wi-Fi STA：wifi_sta_start / wifi_sta_get_status
+  stock_data.h      取数：stock_data_start / stock_data_get(stock_quote_t*)
+  stock_ui.h        界面：stock_ui_create / stock_ui_refresh
+src/
+  wifi_sta.c        NVS 初始化 + STA 连接 + 自动重连（事件回调）
+  stock_data.c      esp_http_client GET + 防御式 ~ 解析 + 5s 轮询 task
+  stock_ui.c        LVGL 布局 + 刷新（内部加 bsp_lvgl_lock）
+  font_stock_16.c   生成的 1-bpp 子集中文字库（勿手改，改字表须重新生成）
+```
+
+腾讯字段位置（对 `~` 切分、跳过开头 `"` 后按 0 起索引）：
+`[3]现价 [4]昨收 [5]今开 [30]时间(YYYYMMDDhhmmss) [31]涨跌额 [32]涨跌% [33]最高 [34]最低`。
+
+重新生成字库（新增字形时）：
+
+```bash
+npx lv_font_conv --font "/System/Library/Fonts/Supplemental/Arial Unicode.ttf" \
+  --size 16 --bpp 1 --format lvgl --no-compress --lv-include lvgl.h \
+  --range 0x20-0x7E --symbols "洁美科技现价涨跌今开昨收最高低更新连接中无数据↑↓" \
+  -o components/stock_app/src/font_stock_16.c
+```
+
+**已后置到 v2**：Wi-Fi 配网（SoftAP / 二维码 / NVS 存储 / 长按重置）、多股列表、分时图。当前凭据写死在 `stock_config.h`，换网络需改此文件重新编译。交易时段外接口返回收盘价为静态值，盘中才随 5 秒刷新变化（更新时间字段可辨别）。
+
