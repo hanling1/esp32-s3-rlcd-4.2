@@ -1,0 +1,17 @@
+idf_component_register(
+    SRCS
+        "src/bsp_rlcd42.c"
+        "src/st7305.c"
+        "src/bsp_buttons.c"
+        "src/bsp_lvgl.c"
+    INCLUDE_DIRS
+        "include"
+    PRIV_INCLUDE_DIRS
+        "src"
+    REQUIRES
+        driver
+        esp_lcd
+    PRIV_REQUIRES
+        lvgl
+        esp_timer
+)
