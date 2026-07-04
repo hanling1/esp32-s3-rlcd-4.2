@@ -12,3 +12,4 @@ dependencies.lock
 *.swp
 .vscode/
 .idea/
+.cache/
