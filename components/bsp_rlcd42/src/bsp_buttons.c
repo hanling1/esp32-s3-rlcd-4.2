@@ -6,9 +6,8 @@
 #define BSP_BTN_DEBOUNCE_US 20000
 
 static const gpio_num_t s_gpio[BSP_BTN_COUNT] = {
-    BSP_BTN_GPIO_BOOT,
-    BSP_BTN_GPIO_PWR,
-    BSP_BTN_GPIO_KEY,
+    BSP_BTN_GPIO_LEFT,
+    BSP_BTN_GPIO_RIGHT,
 };
 
 static int s_last_level[BSP_BTN_COUNT];

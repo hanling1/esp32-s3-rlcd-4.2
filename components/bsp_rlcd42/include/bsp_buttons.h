@@ -8,9 +8,8 @@ extern "C" {
 #endif
 
 typedef enum {
-    BSP_BTN_BOOT = 0,
-    BSP_BTN_PWR,
-    BSP_BTN_KEY,
+    BSP_BTN_LEFT = 0,
+    BSP_BTN_RIGHT,
     BSP_BTN_COUNT,
 } bsp_button_t;
 
