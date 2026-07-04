@@ -1,7 +1,7 @@
 #include "stock_ui.h"
 #include "stock_data.h"
 #include "stock_config.h"
-#include "wifi_sta.h"
+#include "wifi_portal.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -61,11 +61,28 @@ void stock_ui_refresh(void)
 {
     stock_quote_t q;
     stock_data_get(&q);
-    wifi_sta_status_t wifi = wifi_sta_get_status();
+    wifi_portal_state_t wifi;
+    wifi_portal_get_state(&wifi);
 
     char buf[48];
 
     bsp_lvgl_lock();
+
+    bool provisioning = (wifi.status != WIFI_PORTAL_STATUS_CONNECTED) && (wifi.ap_ssid[0] != '\0');
+
+    if (provisioning) {
+        lv_label_set_text(s_price, "配网模式");
+        snprintf(buf, sizeof(buf), "热点 %s", wifi.ap_ssid);
+        lv_label_set_text(s_change, buf);
+        lv_label_set_text(s_open, "打开 192.168.4.1");
+        lv_label_set_text(s_prev, "");
+        lv_label_set_text(s_high, "");
+        lv_label_set_text(s_low, "");
+        lv_label_set_text(s_time, "");
+        lv_label_set_text(s_status, "");
+        bsp_lvgl_unlock();
+        return;
+    }
 
     if (!q.valid) {
         lv_label_set_text(s_price, "--");
@@ -103,7 +120,7 @@ void stock_ui_refresh(void)
         lv_label_set_text(s_time, buf);
     }
 
-    if (wifi == WIFI_STA_STATUS_CONNECTED) {
+    if (wifi.status == WIFI_PORTAL_STATUS_CONNECTED) {
         lv_label_set_text(s_status, q.valid ? "" : "无数据");
     } else {
         lv_label_set_text(s_status, "连接中");
