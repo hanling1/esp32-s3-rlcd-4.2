@@ -1,8 +1,5 @@
-# wifi-connectivity Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-stock-quote. Update Purpose after archive.
-## Requirements
 ### Requirement: Wi-Fi station connection with hardcoded credentials
 The system SHALL connect to a Wi-Fi network in station (STA) mode using credentials **stored in NVS at runtime** (not compiled into the firmware), initializing NVS as required by the Wi-Fi stack. When valid credentials are present in NVS, the device SHALL attempt a direct STA connection on boot.
 
@@ -18,16 +15,13 @@ The system SHALL connect to a Wi-Fi network in station (STA) mode using credenti
 - **WHEN** the device boots and no valid credentials exist in NVS
 - **THEN** it does not attempt a hardcoded connection and instead enters provisioning (SoftAP captive portal) mode
 
-### Requirement: Automatic reconnection and visible status
-The system SHALL retry the connection when it is not established or is lost, and SHALL expose a connection status the UI can display.
+## REMOVED Requirements
 
-#### Scenario: Retry while disconnected
-- **WHEN** the network is unavailable or the connection drops
-- **THEN** the device keeps retrying without blocking the UI task, and the UI can show a "connecting"/"failed" state
+### Requirement: Provisioning deferred
+**Reason**: This change implements runtime provisioning, which this requirement explicitly excluded. It is replaced by the "SoftAP captive-portal provisioning", "Persist and reuse credentials", and "Factory reset of credentials" requirements below.
+**Migration**: Credentials are no longer compiled in; existing devices with hardcoded credentials must be reflashed once with this change, after which they provision via the portal. The `STOCK_WIFI_SSID` / `STOCK_WIFI_PASSWORD` macros are removed.
 
-#### Scenario: Recovery after network returns
-- **WHEN** the configured network becomes available again after a disconnect
-- **THEN** the device reconnects automatically and stock polling resumes
+## ADDED Requirements
 
 ### Requirement: SoftAP captive-portal provisioning
 When the device has no usable stored credentials (or a stored network fails to connect), the system SHALL host a Wi-Fi SoftAP and a captive-portal web page so a user can select a network and enter its password from a browser, without a companion app.
@@ -69,4 +63,3 @@ The system SHALL let the user erase stored credentials on-device via a long-pres
 #### Scenario: Short press does not reset
 - **WHEN** the KEY button is pressed briefly (less than the hold threshold)
 - **THEN** stored credentials are not erased
-

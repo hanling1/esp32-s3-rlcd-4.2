@@ -8,7 +8,7 @@
 |---|---|
 | 芯片 | ESP32-S3-WROOM-1-N16R8(16MB flash + 8MB 八线 PSRAM@80MHz) |
 | 屏幕 | 4.2" 反射式单色 LCD,ST7305 控制器,SPI,400×300 横屏,1-bit 黑白 |
-| 输入 | 3 个物理按键 BOOT / PWR / KEY(无触摸) |
+| 输入 | 3 个物理按键 左 / 中 / 右(无触摸;左=gpio18,右=gpio0,中键非可读 GPIO) |
 | 框架 | ESP-IDF v6.0.2 + LVGL v8.3.11 |
 
 ## 快速开始
@@ -91,7 +91,7 @@ void app_main(void)
 | `bsp_lvgl_lock()` / `bsp_lvgl_unlock()` | 任何 LVGL 操作前后必须加锁 |
 | `bsp_button_get_pressed_event(btn)` | 轮询，单次按下返回一次 `true`，已去抖（20ms） |
 
-按键枚举：`BSP_BTN_BOOT` / `BSP_BTN_PWR` / `BSP_BTN_KEY`
+按键枚举：`BSP_BTN_LEFT` / `BSP_BTN_RIGHT`（实测:左键=gpio18,右键=gpio0/BOOT;中键非可读 GPIO,不可用）
 
 ## 铁律
 
@@ -101,10 +101,10 @@ void app_main(void)
 
    ```
    屏:  SCLK=11  MOSI=12  CS=40  DC=5  RST=41
-   按键: BOOT=0   PWR=46   KEY=4
+   按键: LEFT=18  RIGHT=0(BOOT)
    ```
 
-   注意：这些引脚为社区值，尚未对照官方原理图逐一核实。目前实测能点亮，正式产品前应核对（见"欠账"）。
+   注意：屏幕引脚为社区值，尚未对照官方原理图逐一核实（目前实测能点亮）。按键引脚已用真机 GPIO 扫描实测校准（原 gpio46/gpio4 是错的）；中键不是可读 GPIO 输入，未纳入枚举。
 4. **别动这几项 sdkconfig**（动了要么编不过要么 boot 循环）：
 
    ```
@@ -162,7 +162,7 @@ ST7305 每字节对应一个 2×2 像素块的非常规排布，通过预计算 
 - **股票**：002859 洁美科技（写死，中文名为 UTF-8 常量）
 - **数据源**：腾讯 `http://qt.gtimg.cn/q=sz002859`，纯 HTTP，返回 `~` 分隔文本，无需 TLS / key / JSON 库
 - **刷新**：后台 task 每 5 秒取一次；UI 每秒重绘
-- **Wi-Fi**：STA 写死 `solaso_5G`（凭据在 `components/stock_app/include/stock_config.h`），断线自动重连
+- **Wi-Fi**：SoftAP captive-portal 配网。首次无凭据自动开热点 `Stock_XXXXXX`（MAC 后 3 字节，开放无密码），手机连上浏览器打开 `192.168.4.1` 填 SSID/密码，存 NVS，重启直连；长按 KEY 键 3 秒擦除凭据重新配网
 - **字库**：`font_stock_16`（16px 1-bpp 子集，仅嵌入 UI 用到的固定字形），由 `lv_font_conv` 生成
 - **容错**：取数 / 解析失败保留上次数值、不崩溃；首次连网前显示"连接中"、无数据显示 `--`
 - **涨跌**：单色屏无红绿，用 ↑ / ↓ 表示
@@ -171,16 +171,19 @@ ST7305 每字节对应一个 2×2 像素块的非常规排布，通过预计算 
 
 ```
 include/
-  stock_config.h    写死项单一真相源（SSID/密码/股票代码/URL/刷新周期）
-  wifi_sta.h        Wi-Fi STA：wifi_sta_start / wifi_sta_get_status
+  stock_config.h    写死项单一真相源（AP 前缀/长按重置时长/股票代码/URL/刷新周期）
+  wifi_portal.h     配网 API：wifi_portal_start / wifi_portal_get_state / wifi_portal_erase_credentials
   stock_data.h      取数：stock_data_start / stock_data_get(stock_quote_t*)
   stock_ui.h        界面：stock_ui_create / stock_ui_refresh
 src/
-  wifi_sta.c        NVS 初始化 + STA 连接 + 自动重连（事件回调）
+  wifi_portal.c     SoftAP + captive portal + STA 连接 + NVS 存/取凭据（事件回调）
   stock_data.c      esp_http_client GET + 防御式 ~ 解析 + 5s 轮询 task
-  stock_ui.c        LVGL 布局 + 刷新（内部加 bsp_lvgl_lock）
+  stock_ui.c        LVGL 布局 + 刷新（行情视图 / 配网视图，内部加 bsp_lvgl_lock）
   font_stock_16.c   生成的 1-bpp 子集中文字库（勿手改，改字表须重新生成）
 ```
+
+`wifi_portal` 与同目录 `components/dns_server` 移植自
+[esp32_wifi_configuration](https://github.com/zhy345517-rgb/esp32_wifi_configuration)（`dns_server` 即 Espressif captive_portal 官方实现），本项目删除其 NTP 逻辑、增加长按重置用的凭据擦除接口，仅供个人学习。
 
 腾讯字段位置（对 `~` 切分、跳过开头 `"` 后按 0 起索引）：
 `[3]现价 [4]昨收 [5]今开 [30]时间(YYYYMMDDhhmmss) [31]涨跌额 [32]涨跌% [33]最高 [34]最低`。
@@ -190,9 +193,9 @@ src/
 ```bash
 npx lv_font_conv --font "/System/Library/Fonts/Supplemental/Arial Unicode.ttf" \
   --size 16 --bpp 1 --format lvgl --no-compress --lv-include lvgl.h \
-  --range 0x20-0x7E --symbols "洁美科技现价涨跌今开昨收最高低更新连接中无数据↑↓" \
+  --range 0x20-0x7E --symbols "洁美科技现价涨跌今开昨收最高低更新连接中无数据配网模式热点打开↑↓" \
   -o components/stock_app/src/font_stock_16.c
 ```
 
-**已后置到 v2**：Wi-Fi 配网（SoftAP / 二维码 / NVS 存储 / 长按重置）、多股列表、分时图。当前凭据写死在 `stock_config.h`，换网络需改此文件重新编译。交易时段外接口返回收盘价为静态值，盘中才随 5 秒刷新变化（更新时间字段可辨别）。
+**已后置到 v2**：多股列表、分时图。交易时段外接口返回收盘价为静态值，盘中才随 5 秒刷新变化（更新时间字段可辨别）。
 
