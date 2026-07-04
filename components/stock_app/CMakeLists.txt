@@ -1,0 +1,17 @@
+idf_component_register(
+    SRCS
+        "src/wifi_sta.c"
+        "src/stock_data.c"
+        "src/stock_ui.c"
+        "src/font_stock_16.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        bsp_rlcd42
+        lvgl
+        esp_wifi
+        esp_http_client
+        nvs_flash
+        esp_netif
+        esp_event
+)
