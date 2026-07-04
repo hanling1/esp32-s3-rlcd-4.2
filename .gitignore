@@ -13,3 +13,4 @@ dependencies.lock
 .vscode/
 .idea/
 .cache/
+.env
