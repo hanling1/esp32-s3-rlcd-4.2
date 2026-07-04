@@ -29,17 +29,19 @@ void app_main(void)
     ESP_ERROR_CHECK(stock_data_start());
 
     int64_t key_down_us = 0;
+    bool right_was_down = false;
+    int current_idx = 0;
     int ui_tick = 0;
 
     for (;;) {
         if (++ui_tick >= 10) {
             ui_tick = 0;
-            stock_ui_refresh();
+            stock_ui_refresh(current_idx);
         }
 
         /* LEFT key (gpio18) is active-low with pull-up. Holding it for
          * STOCK_RESET_HOLD_MS clears stored credentials and reboots into the
-         * provisioning portal. */
+         * provisioning portal; a shorter press selects the previous stock. */
         if (gpio_get_level(BSP_BTN_GPIO_LEFT) == 0) {
             if (key_down_us == 0) {
                 key_down_us = esp_timer_get_time();
@@ -49,8 +51,21 @@ void app_main(void)
                 esp_restart();
             }
         } else {
+            if (key_down_us != 0) {
+                current_idx = (current_idx + STOCK_COUNT - 1) % STOCK_COUNT;
+                stock_ui_refresh(current_idx);
+            }
             key_down_us = 0;
         }
+
+        /* RIGHT key (gpio0/BOOT) is active-low; a press selects the next stock.
+         * Edge-detected on release so a single tap advances exactly once. */
+        bool right_down = (gpio_get_level(BSP_BTN_GPIO_RIGHT) == 0);
+        if (!right_down && right_was_down) {
+            current_idx = (current_idx + 1) % STOCK_COUNT;
+            stock_ui_refresh(current_idx);
+        }
+        right_was_down = right_down;
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }

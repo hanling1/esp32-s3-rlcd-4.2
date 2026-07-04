@@ -10,6 +10,8 @@
 
 LV_FONT_DECLARE(font_stock_16);
 
+static lv_obj_t *s_name;
+static lv_obj_t *s_page;
 static lv_obj_t *s_price;
 static lv_obj_t *s_change;
 static lv_obj_t *s_open;
@@ -36,7 +38,8 @@ esp_err_t stock_ui_create(void)
     lv_obj_set_style_bg_color(scr, lv_color_white(), 0);
     lv_obj_set_style_text_color(scr, lv_color_black(), 0);
 
-    make_label(scr, STOCK_NAME_UTF8 "  " STOCK_CODE, 10, 8);
+    s_name = make_label(scr, STOCK_WATCHLIST[0].name_utf8, 10, 8);
+    s_page = make_label(scr, "[1/1]", 320, 8);
 
     s_price = lv_label_create(scr);
     lv_obj_set_style_text_font(s_price, &font_stock_16, 0);
@@ -57,16 +60,20 @@ esp_err_t stock_ui_create(void)
     return ESP_OK;
 }
 
-void stock_ui_refresh(void)
+void stock_ui_refresh(int idx)
 {
     stock_quote_t q;
-    stock_data_get(&q);
+    stock_data_get(idx, &q);
     wifi_portal_state_t wifi;
     wifi_portal_get_state(&wifi);
 
     char buf[48];
 
     bsp_lvgl_lock();
+
+    lv_label_set_text(s_name, STOCK_WATCHLIST[idx].name_utf8);
+    snprintf(buf, sizeof(buf), "[%d/%d]", idx + 1, (int)STOCK_COUNT);
+    lv_label_set_text(s_page, buf);
 
     bool provisioning = (wifi.status != WIFI_PORTAL_STATUS_CONNECTED) && (wifi.ap_ssid[0] != '\0');
 

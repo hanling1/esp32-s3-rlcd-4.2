@@ -157,12 +157,13 @@ ST7305 每字节对应一个 2×2 像素块的非常规排布，通过预计算 
 
 ## 示例应用：股票实时行情（stock_app）
 
-当前 `main/main.c` 运行一个单股行情查看器，展示"联网 → 取数 → 单色屏渲染"的完整链路。
+当前 `main/main.c` 运行一个自选股行情查看器，展示"联网 → 取数 → 单色屏渲染 → 按键切换"的完整链路。
 
-- **股票**：002859 洁美科技（写死，中文名为 UTF-8 常量）
-- **数据源**：腾讯 `http://qt.gtimg.cn/q=sz002859`，纯 HTTP，返回 `~` 分隔文本，无需 TLS / key / JSON 库
-- **刷新**：后台 task 每 5 秒取一次；UI 每秒重绘
-- **Wi-Fi**：SoftAP captive-portal 配网。首次无凭据自动开热点 `Stock_XXXXXX`（MAC 后 3 字节，开放无密码），手机连上浏览器打开 `192.168.4.1` 填 SSID/密码，存 NVS，重启直连；长按 KEY 键 3 秒擦除凭据重新配网
+- **自选股**：3 只写死（`stock_config.h` 中的 `STOCK_WATCHLIST` 表，每项含 secid/code/中文名 UTF-8）——002859 洁美科技、002946 新乳业、000636 风华高科
+- **切换**：左键（gpio18）短按上一只 / 右键（gpio0/BOOT）短按下一只，循环；屏右上角显示页码 `[i/N]`
+- **数据源**：腾讯 `http://qt.gtimg.cn/q=sz002859,sz002946,sz000636`，一次请求批量返回多行，按 code 匹配到各股（不依赖返回顺序），纯 HTTP，返回 `~` 分隔文本，无需 TLS / key / JSON 库
+- **刷新**：后台 task 每 5 秒批量取一次；UI 每秒重绘；某只解析失败保留其上次快照
+- **Wi-Fi**：SoftAP captive-portal 配网。首次无凭据自动开热点 `Stock_XXXXXX`（MAC 后 3 字节，开放无密码），手机连上浏览器打开 `192.168.4.1` 填 SSID/密码，存 NVS，重启直连；长按左键 3 秒擦除凭据重新配网（短按为切换股票，松开时按时长区分）
 - **字库**：`font_stock_16`（16px 1-bpp 子集，仅嵌入 UI 用到的固定字形），由 `lv_font_conv` 生成
 - **容错**：取数 / 解析失败保留上次数值、不崩溃；首次连网前显示"连接中"、无数据显示 `--`
 - **涨跌**：单色屏无红绿，用 ↑ / ↓ 表示
@@ -171,14 +172,14 @@ ST7305 每字节对应一个 2×2 像素块的非常规排布，通过预计算 
 
 ```
 include/
-  stock_config.h    写死项单一真相源（AP 前缀/长按重置时长/股票代码/URL/刷新周期）
+  stock_config.h    写死项单一真相源（AP 前缀/长按重置时长/自选股表 STOCK_WATCHLIST/批量 URL 基址/刷新周期）
   wifi_portal.h     配网 API：wifi_portal_start / wifi_portal_get_state / wifi_portal_erase_credentials
-  stock_data.h      取数：stock_data_start / stock_data_get(stock_quote_t*)
-  stock_ui.h        界面：stock_ui_create / stock_ui_refresh
+  stock_data.h      取数：stock_data_start / stock_data_get(idx, stock_quote_t*)
+  stock_ui.h        界面：stock_ui_create / stock_ui_refresh(idx)
 src/
   wifi_portal.c     SoftAP + captive portal + STA 连接 + NVS 存/取凭据（事件回调）
-  stock_data.c      esp_http_client GET + 防御式 ~ 解析 + 5s 轮询 task
-  stock_ui.c        LVGL 布局 + 刷新（行情视图 / 配网视图，内部加 bsp_lvgl_lock）
+  stock_data.c      esp_http_client 批量 GET + 按 code 匹配的多行 ~ 解析 + 5s 轮询 task
+  stock_ui.c        LVGL 布局 + 刷新（行情视图含页码 / 配网视图，内部加 bsp_lvgl_lock）
   font_stock_16.c   生成的 1-bpp 子集中文字库（勿手改，改字表须重新生成）
 ```
 
@@ -193,9 +194,9 @@ src/
 ```bash
 npx lv_font_conv --font "/System/Library/Fonts/Supplemental/Arial Unicode.ttf" \
   --size 16 --bpp 1 --format lvgl --no-compress --lv-include lvgl.h \
-  --range 0x20-0x7E --symbols "洁美科技现价涨跌今开昨收最高低更新连接中无数据配网模式热点打开↑↓" \
+  --range 0x20-0x7E --symbols "洁美科技现价涨跌今开昨收最高低更新连接中无数据配网模式热点打开↑↓新乳业风华" \
   -o components/stock_app/src/font_stock_16.c
 ```
 
-**已后置到 v2**：多股列表、分时图。交易时段外接口返回收盘价为静态值，盘中才随 5 秒刷新变化（更新时间字段可辨别）。
+**已后置到 v2**：web 管理自选股列表（避开 GBK，须输代码+名称）、分时图。交易时段外接口返回收盘价为静态值，盘中才随 5 秒刷新变化（更新时间字段可辨别）。
 

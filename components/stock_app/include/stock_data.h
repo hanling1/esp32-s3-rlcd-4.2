@@ -19,13 +19,15 @@ typedef struct {
     char update_time[16];
 } stock_quote_t;
 
-/* Starts a background task that polls the quote endpoint every 5 s and keeps
- * the shared snapshot up to date. Call wifi_portal_start() first. */
+/* Starts a background task that polls every watchlist stock every 5 s in one
+ * batched request and keeps a per-stock snapshot up to date. Call
+ * wifi_portal_start() first. */
 esp_err_t stock_data_start(void);
 
-/* Copies the latest snapshot into out. quote.valid is false until the first
- * successful fetch and stays true afterwards even across transient failures. */
-void stock_data_get(stock_quote_t *out);
+/* Copies the latest snapshot for watchlist index idx into out. quote.valid is
+ * false until that stock's first successful fetch and stays true afterwards
+ * even across transient failures. Out-of-range idx yields an invalid quote. */
+void stock_data_get(int idx, stock_quote_t *out);
 
 #ifdef __cplusplus
 }

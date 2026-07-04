@@ -1,8 +1,5 @@
-# stock-data Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-stock-quote. Update Purpose after archive.
-## Requirements
 ### Requirement: Poll the realtime quote endpoint on a fixed interval
 The system SHALL fetch realtime quotes for all stocks in a hardcoded watchlist from the Tencent endpoint in a SINGLE batched request over plain HTTP every 5 seconds, using a comma-separated secid query (e.g. `http://qt.gtimg.cn/q=sz002859,sz002946,sz000636`).
 
@@ -25,19 +22,14 @@ The system SHALL parse EACH `~`-delimited response line returned for the batched
 - **WHEN** a line is truncated, empty, missing, or has fewer fields than expected
 - **THEN** the parser reports failure for that stock without crashing, and does not overwrite that stock's previously good values with garbage
 
-### Requirement: Ignore the GBK name field
-The system SHALL NOT decode the GBK-encoded name field from the response; the displayed Chinese name is provided separately as a hardcoded UTF-8 constant.
-
-#### Scenario: Raw bytes split safely
-- **WHEN** the response containing GBK bytes is parsed
-- **THEN** parsing splits on the ASCII `~` delimiter and reads only ASCII numeric fields, never decoding the GBK name bytes
-
 ### Requirement: Fault tolerance on fetch failure
 The system SHALL keep operating when a fetch fails (timeout, connection error, or parse failure), retaining the last known values per stock or indicating unavailable data.
 
 #### Scenario: Transient failure
 - **WHEN** a single batched fetch times out or fails to parse
 - **THEN** the poll loop continues, the app does not crash or reboot, and each stock's UI shows `--` or its last known values
+
+## ADDED Requirements
 
 ### Requirement: Hardcoded watchlist of multiple stocks
 The system SHALL define a compile-time watchlist of stocks, each with a Tencent secid, a display code, and a UTF-8 display name, as the single source of truth for what is polled and shown.
@@ -60,4 +52,3 @@ The system SHALL store one quote snapshot per watchlist stock and expose them by
 #### Scenario: Watchlist count is queryable
 - **WHEN** a consumer needs to bound or wrap a selection index
 - **THEN** the number of watchlist stocks is available to it
-

@@ -11,20 +11,14 @@
 
 static const char *TAG = "stock_data";
 
-#define RESP_BUF_SIZE 1024
+#define RESP_BUF_SIZE 2048
 #define TOKEN_MAX     64
 
-static stock_quote_t s_quote;
+static stock_quote_t s_quotes[STOCK_COUNT];
 static SemaphoreHandle_t s_mutex;
 
-static bool parse_response(const char *body, stock_quote_t *out)
+static bool parse_record(const char *start, stock_quote_t *out)
 {
-    const char *start = strchr(body, '"');
-    if (!start) {
-        return false;
-    }
-    start++;
-
     const char *tokens[TOKEN_MAX];
     int count = 0;
     const char *p = start;
@@ -65,15 +59,51 @@ static bool parse_response(const char *body, stock_quote_t *out)
     return true;
 }
 
-static bool fetch_once(stock_quote_t *out)
+/* Parses a batched response with one v_...="..."; line per requested stock,
+ * matching each line to its watchlist index by the code embedded in the
+ * v_<secid> assignment name. Writes matched quotes into results[]; leaves
+ * unmatched/failed entries with valid=false. Returns the number parsed. */
+static int parse_batched(const char *body, stock_quote_t *results)
 {
+    int parsed = 0;
+    for (int i = 0; i < STOCK_COUNT; i++) {
+        results[i].valid = false;
+
+        char needle[24];
+        snprintf(needle, sizeof(needle), "v_%s=", STOCK_WATCHLIST[i].secid);
+        const char *line = strstr(body, needle);
+        if (!line) {
+            continue;
+        }
+        const char *quote = strchr(line, '"');
+        if (!quote) {
+            continue;
+        }
+        if (parse_record(quote + 1, &results[i])) {
+            parsed++;
+        }
+    }
+    return parsed;
+}
+
+static bool fetch_all(stock_quote_t *results)
+{
+    char *url = malloc(RESP_BUF_SIZE);
     char *buf = malloc(RESP_BUF_SIZE);
-    if (!buf) {
+    if (!url || !buf) {
+        free(url);
+        free(buf);
         return false;
     }
 
+    int pos = snprintf(url, RESP_BUF_SIZE, "%s", STOCK_QUOTE_BASE_URL);
+    for (int i = 0; i < STOCK_COUNT; i++) {
+        pos += snprintf(url + pos, RESP_BUF_SIZE - pos, "%s%s",
+                        (i == 0) ? "" : ",", STOCK_WATCHLIST[i].secid);
+    }
+
     esp_http_client_config_t config = {
-        .url = STOCK_QUOTE_URL,
+        .url = url,
         .timeout_ms = 8000,
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -84,27 +114,32 @@ static bool fetch_once(stock_quote_t *out)
         int len = esp_http_client_read(client, buf, RESP_BUF_SIZE - 1);
         if (len > 0) {
             buf[len] = '\0';
-            ok = parse_response(buf, out);
+            ok = (parse_batched(buf, results) > 0);
         }
     }
 
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+    free(url);
     free(buf);
     return ok;
 }
 
 static void poll_task(void *arg)
 {
-    stock_quote_t local;
+    stock_quote_t local[STOCK_COUNT];
     for (;;) {
-        memset(&local, 0, sizeof(local));
-        if (fetch_once(&local)) {
+        memset(local, 0, sizeof(local));
+        if (fetch_all(local)) {
             xSemaphoreTake(s_mutex, portMAX_DELAY);
-            s_quote = local;
+            for (int i = 0; i < STOCK_COUNT; i++) {
+                if (local[i].valid) {
+                    s_quotes[i] = local[i];
+                }
+            }
             xSemaphoreGive(s_mutex);
-            ESP_LOGI(TAG, "price=%.2f pct=%.2f%% time=%s",
-                     local.price, local.change_pct, local.update_time);
+            ESP_LOGI(TAG, "updated %d stocks, [0] price=%.2f pct=%.2f%%",
+                     (int)STOCK_COUNT, local[0].price, local[0].change_pct);
         } else {
             ESP_LOGW(TAG, "fetch/parse failed, keeping previous");
         }
@@ -118,16 +153,20 @@ esp_err_t stock_data_start(void)
     if (!s_mutex) {
         return ESP_ERR_NO_MEM;
     }
-    memset(&s_quote, 0, sizeof(s_quote));
+    memset(s_quotes, 0, sizeof(s_quotes));
     if (xTaskCreate(poll_task, "stock_poll", 6144, NULL, 5, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
 }
 
-void stock_data_get(stock_quote_t *out)
+void stock_data_get(int idx, stock_quote_t *out)
 {
+    if (idx < 0 || idx >= STOCK_COUNT) {
+        memset(out, 0, sizeof(*out));
+        return;
+    }
     xSemaphoreTake(s_mutex, portMAX_DELAY);
-    *out = s_quote;
+    *out = s_quotes[idx];
     xSemaphoreGive(s_mutex);
 }
