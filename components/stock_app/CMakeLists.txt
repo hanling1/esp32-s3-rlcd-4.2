@@ -1,6 +1,6 @@
 idf_component_register(
     SRCS
-        "src/wifi_sta.c"
+        "src/wifi_portal.c"
         "src/stock_data.c"
         "src/stock_ui.c"
         "src/font_stock_16.c"
@@ -11,7 +11,11 @@ idf_component_register(
         lvgl
         esp_wifi
         esp_http_client
+        esp_http_server
+        dns_server
         nvs_flash
         esp_netif
         esp_event
+    EMBED_FILES
+        "index.html"
 )

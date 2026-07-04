@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 WiFi Portal</title>
+<style>
+:root {
+  --bg-1: #f6f9fc;
+  --bg-2: #e8f1fb;
+  --card: #ffffff;
+  --text: #172033;
+  --muted: #657089;
+  --primary: #1661b6;
+  --primary-weak: #dcecff;
+  --danger: #b3261e;
+  --border: #d6dfec;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 20% 0%, var(--bg-2), var(--bg-1) 45%);
+  color: var(--text);
+  padding: 18px;
+}
+.card {
+  width: min(92vw, 380px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 18px 45px rgba(17, 27, 45, 0.14);
+  padding: 22px 18px;
+}
+h1 {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+.sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 10px;
+  font-size: 14px;
+}
+input:focus {
+  outline: none;
+  border-color: #7ba8db;
+  box-shadow: 0 0 0 3px rgba(22, 97, 182, 0.12);
+}
+button {
+  width: 100%;
+  padding: 11px 10px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 15px;
+  cursor: pointer;
+  margin-top: 12px;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+.btn-secondary {
+  background: var(--primary-weak);
+  color: var(--primary);
+}
+.panel {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.wifi-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.wifi-item:last-child {
+  border-bottom: 0;
+}
+.wifi-item:hover {
+  background: #f7fbff;
+}
+.wifi-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.wifi-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.msg {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.msg.error { color: var(--danger); }
+.status {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>WiFi Setup</h1>
+  <div class="sub" id="ap-ssid">AP: loading...</div>
+
+  <form id="wifi-form" onsubmit="return connectWifi(event)">
+    <label for="ssid">SSID</label>
+    <input id="ssid" name="ssid" type="text" required placeholder="Enter or select SSID">
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" placeholder="Leave empty for open network">
+
+    <button class="btn-primary" id="btn-connect" type="submit">Connect</button>
+  </form>
+
+  <button class="btn-secondary" id="btn-scan" onclick="scanWifi()" type="button">Scan Nearby Networks</button>
+  <div id="wifi-list" class="panel hidden"></div>
+
+  <div id="msg" class="msg"></div>
+  <div id="status" class="status"></div>
+</div>
+
+<script>
+var pollTimer = null;
+
+function setMessage(text, isError) {
+  var el = document.getElementById('msg');
+  el.textContent = text || '';
+  el.className = isError ? 'msg error' : 'msg';
+}
+
+function setStatus(text) {
+  document.getElementById('status').textContent = text || '';
+}
+
+function renderWifiList(list) {
+  var panel = document.getElementById('wifi-list');
+  panel.innerHTML = '';
+
+  if (!list || list.length === 0) {
+    panel.className = 'panel';
+    panel.textContent = 'No network found';
+    return;
+  }
+
+  panel.className = 'panel';
+  for (var i = 0; i < list.length; i++) {
+    (function(ap) {
+      var row = document.createElement('div');
+      row.className = 'wifi-item';
+      row.onclick = function() {
+        document.getElementById('ssid').value = ap.ssid || '';
+        document.getElementById('password').focus();
+      };
+
+      var name = document.createElement('div');
+      name.className = 'wifi-name';
+      name.textContent = ap.ssid || '(hidden)';
+
+      var meta = document.createElement('div');
+      meta.className = 'wifi-meta';
+      meta.textContent = 'RSSI ' + ap.rssi + (ap.encrypted ? ' lock' : ' open');
+
+      row.appendChild(name);
+      row.appendChild(meta);
+      panel.appendChild(row);
+    })(list[i]);
+  }
+}
+
+function scanWifi() {
+  var btn = document.getElementById('btn-scan');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  setMessage('Scanning nearby WiFi...', false);
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/scan', true);
+  xhr.timeout = 15000;
+  xhr.onload = function() {
+    btn.disabled = false;
+    btn.textContent = 'Scan Nearby Networks';
+
+    if (xhr.status !== 200) {
+      setMessage('Scan failed', true);
+      return;
+    }
+
+    try {
+      var data = JSON.parse(xhr.responseText);
+      renderWifiList(data);
+      setMessage('Select one network or input manually', false);
+    } catch (e) {
+      setMessage('Scan result parse error', true);
+    }
+  };
+
+  xhr.onerror = function() {
+    btn.disabled = false;
+    btn.textContent = 'Scan Nearby Networks';
+    setMessage('Scan request failed', true);
+  };
+
+  xhr.ontimeout = function() {
+    btn.disabled = false;
+    btn.textContent = 'Scan Nearby Networks';
+    setMessage('Scan timeout', true);
+  };
+
+  xhr.send();
+}
+
+function connectWifi(event) {
+  event.preventDefault();
+
+  var ssid = document.getElementById('ssid').value || '';
+  var password = document.getElementById('password').value || '';
+  if (!ssid) {
+    setMessage('SSID is required', true);
+    return false;
+  }
+
+  document.getElementById('btn-connect').disabled = true;
+  setMessage('Connecting...', false);
+  setStatus('');
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/connect', true);
+  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      beginPoll();
+    } else {
+      document.getElementById('btn-connect').disabled = false;
+      setMessage('Connect request failed', true);
+    }
+  };
+  xhr.onerror = function() {
+    document.getElementById('btn-connect').disabled = false;
+    setMessage('Connect request error', true);
+  };
+  xhr.send('ssid=' + encodeURIComponent(ssid) + '&password=' + encodeURIComponent(password));
+
+  return false;
+}
+
+function beginPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  pollTimer = setInterval(refreshStatus, 1000);
+}
+
+function refreshStatus() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/status', true);
+  xhr.onload = function() {
+    if (xhr.status !== 200) {
+      return;
+    }
+
+    var data;
+    try {
+      data = JSON.parse(xhr.responseText);
+    } catch (e) {
+      return;
+    }
+
+    if (data.ap_ssid) {
+      document.getElementById('ap-ssid').textContent = 'AP: ' + data.ap_ssid;
+    }
+
+    if (data.status === 'connecting') {
+      setStatus('State: connecting...');
+      return;
+    }
+
+    if (data.status === 'connected') {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      setMessage('Connected successfully', false);
+      setStatus('STA IP: ' + (data.ip || 'N/A'));
+      document.getElementById('btn-connect').disabled = false;
+      return;
+    }
+
+    if (data.status === 'failed') {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      setMessage('Connection failed: ' + (data.reason || 'unknown'), true);
+      setStatus('');
+      document.getElementById('btn-connect').disabled = false;
+      return;
+    }
+
+    setStatus('State: ' + data.status);
+  };
+  xhr.send();
+}
+
+refreshStatus();
+</script>
+</body>
+</html>
