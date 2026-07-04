@@ -7,4 +7,6 @@ idf_component_register(
         bsp_rlcd42
         lvgl
         stock_app
+        esp_driver_gpio
+        esp_timer
 )

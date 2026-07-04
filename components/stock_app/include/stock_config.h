@@ -1,7 +1,7 @@
 #pragma once
 
-#define STOCK_WIFI_SSID     "solaso_2.4G"
-#define STOCK_WIFI_PASSWORD "sls123456"
+#define STOCK_AP_SSID_PREFIX "Stock"
+#define STOCK_RESET_HOLD_MS  3000
 
 #define STOCK_SECID         "sz002859"
 #define STOCK_NAME_UTF8     "洁美科技"

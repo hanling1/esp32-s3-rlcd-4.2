@@ -20,7 +20,7 @@ typedef struct {
 } stock_quote_t;
 
 /* Starts a background task that polls the quote endpoint every 5 s and keeps
- * the shared snapshot up to date. Call wifi_sta_start() first. */
+ * the shared snapshot up to date. Call wifi_portal_start() first. */
 esp_err_t stock_data_start(void);
 
 /* Copies the latest snapshot into out. quote.valid is false until the first
