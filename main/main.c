@@ -4,21 +4,25 @@
 
 #include "bsp_rlcd42.h"
 #include "bsp_lvgl.h"
-#include "lvgl.h"
+#include "wifi_sta.h"
+#include "stock_data.h"
+#include "stock_ui.h"
 
 static const char *TAG = "app";
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "ESP32-S3-RLCD-4.2 booting...");
+    ESP_LOGI(TAG, "stock quote viewer booting...");
 
     ESP_ERROR_CHECK(bsp_init());
     ESP_ERROR_CHECK(bsp_lvgl_init());
+    ESP_ERROR_CHECK(stock_ui_create());
 
-    bsp_lvgl_lock();
-    lv_obj_t *scr = lv_scr_act();
-    lv_obj_t *label = lv_label_create(scr);
-    lv_label_set_text(label, "Hello ESP32-S3-RLCD-4.2");
-    lv_obj_center(label);
-    bsp_lvgl_unlock();
+    ESP_ERROR_CHECK(wifi_sta_start());
+    ESP_ERROR_CHECK(stock_data_start());
+
+    for (;;) {
+        stock_ui_refresh();
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }

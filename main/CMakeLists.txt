@@ -6,4 +6,5 @@ idf_component_register(
     REQUIRES
         bsp_rlcd42
         lvgl
+        stock_app
 )
